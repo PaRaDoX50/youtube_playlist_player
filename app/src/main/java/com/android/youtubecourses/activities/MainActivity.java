@@ -1,12 +1,16 @@
 package com.android.youtubecourses.activities;
 
+import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.Observer;
@@ -14,9 +18,11 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.android.youtubecourses.activities.offline.OfflinePlaylistActivity;
 import com.android.youtubecourses.adapters.PlaylistAdapter;
 import com.android.youtubecourses.models.PlaylistModel;
 import com.android.youtubecourses.R;
+import com.android.youtubecourses.viewmodel.DatabaseViewModel;
 import com.android.youtubecourses.viewmodel.YoutubeViewModel;
 
 import java.util.ArrayList;
@@ -25,17 +31,32 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity implements PlaylistAdapter.onPlayListClick {
 
     private YoutubeViewModel youtubeViewModel;
+    private DatabaseViewModel databaseViewModel;
     List<PlaylistModel> playlists = new ArrayList<>();
     ProgressBar progressBar;
     FrameLayout noContent;
+    Button offlineModeButton;
 
     @Override
     public void onPlaylistClick(int position) {
-        Intent route = new Intent(this, VideoListActivity.class);
-        route.putExtra("playlistId", playlists.get(position).getPlaylistId());
-        route.putExtra("playlistName", playlists.get(position).getTitle());
+        ConnectivityManager cm =
+                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
 
-        startActivity(route);
+        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+        boolean isConnected = activeNetwork != null &&
+                activeNetwork.isConnectedOrConnecting();
+        if(isConnected) {
+            Intent route = new Intent(this, VideoListActivity.class);
+            route.putExtra("playlistId", playlists.get(position).getPlaylistId());
+            route.putExtra("playlistName", playlists.get(position).getTitle());
+
+            startActivity(route);
+
+        }
+        else{
+            Toast.makeText(MainActivity.this,"No Internet Connection.Cannot proceed.Switch to offline mode.",Toast.LENGTH_SHORT).show();
+        }
+
     }
 
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,11 +66,16 @@ public class MainActivity extends AppCompatActivity implements PlaylistAdapter.o
         final PlaylistAdapter playlistAdapter = new PlaylistAdapter(this);
         progressBar = findViewById(R.id.loading);
         noContent = findViewById(R.id.no_content);
+        offlineModeButton = findViewById(R.id.offline_mode);
 
 
         youtubeViewModel = new ViewModelProvider(this,
                 new ViewModelProvider.AndroidViewModelFactory(this.getApplication()))
                 .get(YoutubeViewModel.class);
+
+        databaseViewModel = new ViewModelProvider(this,
+                new ViewModelProvider.AndroidViewModelFactory(this.getApplication()))
+                .get(DatabaseViewModel.class);
         final RecyclerView recyclerView = findViewById(R.id.playlist_recyclerview);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(playlistAdapter);
@@ -79,16 +105,42 @@ public class MainActivity extends AppCompatActivity implements PlaylistAdapter.o
                 else{
                     noContent.setVisibility(View.GONE);
                 }
+                for(int i = 0; i  < playlistModels.size();i++){
+                    databaseViewModel.insert(playlistModels.get(i));
+                }
                 playlists = playlistModels;
                 playlistAdapter.setPlaylists(playlistModels);
             }
         });
+
+
         final EditText editText = findViewById(R.id.search);
         Button button = findViewById(R.id.search_button);
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                youtubeViewModel.search(editText.getText().toString());
+                ConnectivityManager cm =
+                        (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+
+                NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+                boolean isConnected = activeNetwork != null &&
+                        activeNetwork.isConnectedOrConnecting();
+                if(isConnected) {
+                    youtubeViewModel.search(editText.getText().toString());
+                }
+                else{
+                    Toast.makeText(MainActivity.this,"No Internet Connection. Switch to offline mode.",Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        offlineModeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent route = new Intent(MainActivity.this,OfflinePlaylistActivity.class);
+
+
+                startActivity(route);
+                finish();
             }
         });
 
